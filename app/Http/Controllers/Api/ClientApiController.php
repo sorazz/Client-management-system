@@ -34,8 +34,10 @@ class ClientApiController extends Controller
 
         Excel::queueImport($import, $file);
 
-        return redirect()->route('clients.importStatus', ['key' => $cacheKey])
-            ->with('status', 'Import started! You can check errors after completion.');
+        return response()->json([
+            'key' => $cacheKey,
+            'status' => 'Import started! You can check errors after completion.'
+        ]);
     }
 
     public function exportFile(Request $request)
@@ -56,6 +58,9 @@ class ClientApiController extends Controller
 
     public function importStatus(Request $request)
     {
+        if(!$request->has('import_key')) {
+            return response()->json(['error' => 'Import key is required'], 400);
+        }
         $request->validate(['import_key' => 'required|string']);
         $key = $request->import_key;
 
