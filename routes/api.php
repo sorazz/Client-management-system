@@ -9,5 +9,5 @@ Route::prefix('clients')->group(function () {
     Route::get('/', [ClientApiController::class, 'index']);
     Route::get('/{id}', [ClientApiController::class, 'show']);
     Route::post('/import', [ClientApiController::class, 'import']);
-    Route::get('/export', [ClientApiController::class, 'export']);
+    Route::get('/export/file', [ClientApiController::class, 'exportFile']);
 });

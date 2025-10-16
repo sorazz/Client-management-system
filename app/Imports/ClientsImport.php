@@ -10,7 +10,6 @@ use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 
 class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, ShouldQueue
 {
