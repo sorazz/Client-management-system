@@ -23,7 +23,7 @@ class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, S
     // Keeps track of seen signatures across chunks
     protected $seenPrimaryId = []; // signature → id of first record
 
-     protected $cacheKey;
+    protected $cacheKey;
 
     public function __construct($cacheKey)
     {
@@ -190,6 +190,7 @@ class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, S
 
     protected function storeError($error)
     {
+        // cache errors to show later
         $current = Cache::get($this->cacheKey, []);
         $current[] = $error;
         Cache::put($this->cacheKey, $current, now()->addHours(2));

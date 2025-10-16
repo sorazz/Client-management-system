@@ -1,66 +1,114 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# CSV-Based Client Management System with Duplicate Detection
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## A Laravel-based application for managing client data, featuring CSV import/export, duplicate detection, and an API for seamless integration.
 
-## About Laravel
+## Table of Contents
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+-   [Overview](#overview)
+-   [Features](#features)
+-   [Prerequisites](#prerequisites)
+-   [Installation](#installation)
+-   [Database Setup & Migration](#database-setup--migration)
+-   [Running the Application](#running-the-application)
+-   [Running Tests](#running-tests)
+-   [API Documentation](#api-documentation)
+-   [Code Structure & Architecture](#code-structure--architecture)
+-   [Database Schema](#database-schema)
+-   [License](#license)
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+---
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Overview
 
-## Learning Laravel
+This Laravel application provides a robust solution for managing client data through CSV file operations. It enables users to upload CSV files containing client information—specifically company_name, email, and phone_number—and processes them efficiently with built-in validation and duplicate detection. The system ensures data integrity by validating each row before import, handling invalid entries gracefully with clear error messages. To manage large datasets, the application supports batch processing, allowing for scalable and efficient imports. Additionally, users can export client data, including duplicates, in CSV format. The application is designed with a RESTful API architecture, adhering to best practices for HTTP methods, validation, and error handling, providing a seamless experience for users.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+I have created a migration file named clients and added the necessary columns, along with an index to enhance performance. A controller for web functionality is located in the App/Http/Controllers directory under the name ClientController, while the API controller resides in App/Http/Controllers/Api as ClientApiController. Both controllers include methods for displaying, importing, and deleting client records. For the import functionality, I utilized Laravel's import feature. The logic for importing is encapsulated in the App/Imports directory within the ClientsImport file, and for exporting, it's located in the App/Exports directory as ClientsExport. A basic CSV file is used to demonstrate the functionality. The default Blade templates are employed to display the import file list, the upload section, and a page for showing invalid CSV rows encountered during the import process.
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+## Features
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+-   CSV Import: Upload and validate client data from CSV files.
 
-## Laravel Sponsors
+-   CSV Export: Download client data, with filtering options for duplicates and unique records.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+-   Duplicate Detection: Automatically identify and flag duplicate client records based on company_name, email, and phone_number.
 
-### Premium Partners
+-   API Endpoints: Provide RESTful API endpoints for CRUD operations on client data.
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+-   Batch Processing: Efficiently handle large CSV files using chunking and queuing.
 
-## Contributing
+## Prerequisites
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+What must be installed / available to run the project:
 
-## Code of Conduct
+-   PHP version ^ 8.2
+-   Composer
+-   A database - Mysql
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Installation
 
-## Security Vulnerabilities
+Step by step instructions to set up the project:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+git clone <repo-url>
+cd project-directory
+composer install
+cp .env.example .env
+php artisan key:generate
 
-## License
+## Database migration
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+-   php artisan make:migrate
+
+## API end points
+
+For the API I have created a ClientApiController for conduct the import and export functionality
+
+-   Get list
+    -   URL: api/clients
+    -   Method: get
+-   Import csv file
+    -   URL: api/clients/import
+    -   Method : post
+-   Export csv file
+    -   URL: api/clients/export/file
+    -   Method: get
+-   Delete row
+    -   URL: api/clients/{id}
+    -   Method : delete
+-   Import status
+    -   URL: api/clients/import/status
+    -   Method: get
+
+## Web end points
+
+For the web I have created a ClientController for conduct the import and export functionality
+
+-   GIndex page
+    -   URL: /clients
+    -   Method: get
+-   Upload form
+    -   URL: /clients/upload
+    -   Method : get
+-   Import csv
+    -   URL: /clients/import
+    -   Method : post
+-   Export csv file
+    -   URL: /clients/export
+    -   Method: get
+-   Delete row
+    -   URL: /clients/{id}
+    -   Method : delete
+-   Import status
+    -   URL: /clients/importStatus
+    -   Method: get
+
+##Architecture and trade offs
+
+-   The CSV management system to handle large datasets efficiently while maintaining data integrity and usability. For CSV imports, I implemented batch processing with validation for required fields and proper email formats to prevent corrupt or invalid data from entering the system; this ensures reliability but adds complexity with queued jobs and error handling. To maintain data quality, I implemented duplicate detection by comparing company_name, email, and phone_number, allowing users to view and manage duplicates; this improves accuracy but slightly impacts import performance. For exports, I enabled filtering and large file handling to support both unique and duplicate data downloads, balancing performance with user flexibility. Finally, I designed a RESTful API with proper validation and error responses to allow seamless integration with other systems
+
+
+## Challanges
+   I have faced challenges where I needed to display invalid rows from a CSV file directly in the UI. However, since I used Excel::queueImport(), the import runs asynchronously in the queue after the controller returns. This means that any errors generated during the import cannot be returned immediately to the current request, which posed a significant problem for real-time error reporting.
+
+## Solutions
+  For the challenges I faced, I implemented a solution to cache the errors and display them once the import finishes. I used the cache within the import class to store all errors with a unique key. This key is then passed to a separate function after the import completes. In that function, I retrieve the errors from the cache using the key. To display the errors to the user, I created a Blade template that refreshes at set intervals to capture and show errors from the ongoing import process.
+  

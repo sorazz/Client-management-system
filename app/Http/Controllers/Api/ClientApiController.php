@@ -24,13 +24,6 @@ class ClientApiController extends Controller
         return response()->json($query->with('primary')->paginate(20));
     }
 
-    public function show($id)
-    {
-        $client = Client::with('duplicates')->find($id);
-        if (!$client) return response()->json(['error' => 'Client not found'], 404);
-        return response()->json($client);
-    }
-
     public function import(ClientsImportRequest $request)
     {
         Cache::flush();
