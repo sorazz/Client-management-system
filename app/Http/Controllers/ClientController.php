@@ -7,7 +7,9 @@ use App\Imports\ClientsImport;
 use App\Exports\ClientsExport;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Cache;
 use App\Http\Requests\ClientsImportRequest;
+use Illuminate\Support\Str;
 
 class ClientController extends Controller
 {
@@ -28,8 +30,16 @@ class ClientController extends Controller
 
     public function import(ClientsImportRequest $request)
     {
-        Excel::queueImport(new ClientsImport(), $request->file('file'));
-        return redirect()->route('clients.upload')->with('status', 'CSV import started in background!');
+        Cache::flush();
+        $file = $request->file('file');
+        $cacheKey = 'import_errors_' . Str::uuid(); // unique key per import
+
+        $import = new ClientsImport($cacheKey);
+
+        Excel::queueImport($import, $file);
+
+        return redirect()->route('clients.importStatus', ['key' => $cacheKey])
+            ->with('status', 'Import started! You can check errors after completion.');
     }
 
     public function export(Request $request)
@@ -49,5 +59,15 @@ class ClientController extends Controller
             new ClientsExport($filter),
             'clients.csv'
         );
+    }
+
+    public function importStatus(Request $request)
+    {
+        $key = $request->get('key');
+        $errors = Cache::get($key, []);
+
+        return view('clients.import_status', [
+            'errors' => $errors
+        ]);
     }
 }

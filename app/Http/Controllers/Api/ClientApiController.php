@@ -8,6 +8,9 @@ use App\Imports\ClientsImport;
 use App\Exports\ClientsExport;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use App\Http\Requests\ClientsImportRequest;
 
 class ClientApiController extends Controller
@@ -30,8 +33,16 @@ class ClientApiController extends Controller
 
     public function import(ClientsImportRequest $request)
     {
-        Excel::queueImport(new ClientsImport(), $request->file('file'));
-        return response()->json(['status' => 'Import started']);
+        Cache::flush();
+        $file = $request->file('file');
+        $cacheKey = 'import_errors_' . Str::uuid(); // unique key per import
+
+        $import = new ClientsImport($cacheKey);
+
+        Excel::queueImport($import, $file);
+
+        return redirect()->route('clients.importStatus', ['key' => $cacheKey])
+            ->with('status', 'Import started! You can check errors after completion.');
     }
 
     public function exportFile(Request $request)
@@ -48,5 +59,21 @@ class ClientApiController extends Controller
             return response()->json(['status' => 'No clients found to export!']);
         }
         return Excel::download(new ClientsExport($filter), 'clients.csv');
+    }
+
+    public function importStatus(Request $request)
+    {
+        $request->validate(['import_key' => 'required|string']);
+        $key = $request->import_key;
+
+        $errors = Cache::get($key, []);
+        $status = Queue::size('default'); // optional: check if queue is still running
+
+        return response()->json([
+            'errors' => $errors,
+            'status' => empty($errors) && $status > 0 ? 'processing' : 'finished',
+            'error_count' => count($errors),
+
+        ]);
     }
 }

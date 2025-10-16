@@ -10,6 +10,7 @@ use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, ShouldQueue
 {
@@ -22,10 +23,19 @@ class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, S
     // Keeps track of seen signatures across chunks
     protected $seenPrimaryId = []; // signature → id of first record
 
+     protected $cacheKey;
+
+    public function __construct($cacheKey)
+    {
+        // Unique cache key for this import
+        $this->cacheKey = $cacheKey;
+        Cache::put($this->cacheKey, [], now()->addHours(2)); // initialize empty errors array
+    }
+
     public function collection(Collection $rows)
     {
         if ($rows->isEmpty()) {
-            $this->errors[] = ['header' => 'File (or chunk) is empty'];
+            $this->storeError(['header' => 'File (or chunk) is empty']);
             return;
         }
 
@@ -33,9 +43,7 @@ class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, S
         $headers = array_keys($rows->first()->toArray());
         $missing = array_diff($this->requiredHeaders, $headers);
         if (!empty($missing)) {
-            $this->errors[] = [
-                'header' => 'Missing required headers: ' . implode(', ', $missing),
-            ];
+            $this->storeError(['header' => 'Missing required headers: ' . implode(', ', $missing)]);
             return;
         }
 
@@ -91,11 +99,12 @@ class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, S
             ]);
 
             if ($validator->fails()) {
-                $this->errors[] = [
-                    'line' => $row['line'],
+                $this->storeError([
+                    'line' => $idx + 2,
+                    'row' => $row,
                     'errors' => $validator->errors()->all(),
-                ];
-                continue;
+                ]);
+                continue; // skip invalid row
             }
 
             $sig = $row['signature'];
@@ -142,7 +151,7 @@ class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, S
         }
     }
 
-     public function chunkSize(): int
+    public function chunkSize(): int
     {
         return 1000;
     }
@@ -177,5 +186,12 @@ class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, S
         }
 
         $this->imported += count($batch);
+    }
+
+    protected function storeError($error)
+    {
+        $current = Cache::get($this->cacheKey, []);
+        $current[] = $error;
+        Cache::put($this->cacheKey, $current, now()->addHours(2));
     }
 }
