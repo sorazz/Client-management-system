@@ -14,3 +14,5 @@ Route::get('/clients/upload',[ClientController::class,'upload'])->name('clients.
 Route::get('/clients/importStatus',[ClientController::class,'importStatus'])->name('clients.importStatus');
 Route::post('/clients/import',[ClientController::class,'import'])->name('clients.import');
 Route::get('/clients/export',[ClientController::class,'export'])->name('clients.export');
+Route::delete('/clients/{id}', [ClientController::class, 'delete'])->name('clients.delete');
+

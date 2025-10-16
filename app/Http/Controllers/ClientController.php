@@ -70,4 +70,16 @@ class ClientController extends Controller
             'errors' => $errors
         ]);
     }
+
+    public function delete($id)
+    {
+        $client = Client::findOrFail($id);
+
+        $client->delete();
+
+        return response()->json([
+            'message' => 'Duplicate client deleted successfully',
+            'id' => $id
+        ]);
+    }
 }

@@ -76,4 +76,15 @@ class ClientApiController extends Controller
 
         ]);
     }
+    public function delete($id)
+    {
+        $client = Client::findOrFail($id);
+
+        $client->delete();
+
+        return response()->json([
+            'message' => 'Duplicate client deleted successfully',
+            'id' => $id
+        ]);
+    }
 }

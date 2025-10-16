@@ -11,4 +11,6 @@ Route::prefix('clients')->group(function () {
     Route::post('/import', [ClientApiController::class, 'import']);
     Route::get('/export/file', [ClientApiController::class, 'exportFile']);
     Route::get('/import/status', [ClientApiController::class, 'importStatus']);
+    Route::delete('/clients/{id}', [ClientApiController::class, 'delete'])->name('clients.delete');
+
 });
