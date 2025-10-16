@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Imports;
 
 use App\Models\Client;
@@ -6,8 +7,10 @@ use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\ToCollection;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
-use Maatwebsite\Excel\Concerns\ShouldQueue;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Validator;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, ShouldQueue
 {
@@ -15,68 +18,165 @@ class ClientsImport implements ToCollection, WithHeadingRow, WithChunkReading, S
     public $imported = 0;
     public $duplicates_found = 0;
 
+    protected $requiredHeaders = ['company_name', 'email', 'phone_number'];
+
+    // Keeps track of seen signatures across chunks
+    protected $seenPrimaryId = []; // signature → id of first record
+
     public function collection(Collection $rows)
     {
-        $batch = [];
-        $seenInFile = [];
+        if ($rows->isEmpty()) {
+            $this->errors[] = ['header' => 'File (or chunk) is empty'];
+            return;
+        }
 
-        foreach ($rows as $index => $row) {
-            $data = [
-                'company_name'=>trim($row['company_name'] ?? ''),
-                'email'=>trim($row['email'] ?? ''),
-                'phone_number'=>trim($row['phone_number'] ?? ''),
+        // Check headers
+        $headers = array_keys($rows->first()->toArray());
+        $missing = array_diff($this->requiredHeaders, $headers);
+        if (!empty($missing)) {
+            $this->errors[] = [
+                'header' => 'Missing required headers: ' . implode(', ', $missing),
             ];
+            return;
+        }
 
-            $validator = Validator::make($data, [
-                'company_name'=>'required|string|max:255',
-                'email'=>'required|email',
-                'phone_number'=>'nullable|string|max:50',
+        $now = Carbon::now();
+
+        // 1. Build counts of signatures in this chunk
+        $chunkSignatures = [];
+        $rowsData = [];
+
+        foreach ($rows as $idx => $row) {
+            $company = strtolower(trim($row['company_name'] ?? ''));
+            $email = strtolower(trim($row['email'] ?? ''));
+            $phone = preg_replace('/\D+/', '', trim($row['phone_number'] ?? ''));
+            $sig = "{$company}||{$email}||{$phone}";
+
+            $chunkSignatures[$sig] = ($chunkSignatures[$sig] ?? 0) + 1;
+
+            $rowsData[] = [
+                'line' => $idx + 2,
+                'company_name' => $company,
+                'email' => $email,
+                'phone_number' => $phone,
+                'signature' => $sig,
+            ];
+        }
+
+        // 2. Prefetch existing clients by email or phone
+        $emails = $rows->pluck('email')->filter()->map(fn($v) => strtolower(trim($v)))->unique();
+        $phones = $rows->pluck('phone_number')->filter()->map(fn($v) => preg_replace('/\D+/', '', trim($v)))->unique();
+
+        $existingClients = Client::whereIn('email', $emails)
+            ->orWhereIn('phone_number', $phones)
+            ->get(['id', 'company_name', 'email', 'phone_number'])
+            ->mapWithKeys(fn($c) => [
+                strtolower(trim($c->company_name))
+                    . '||' . strtolower(trim($c->email))
+                    . '||' . preg_replace('/\D+/', '', trim($c->phone_number))
+                => $c->id
+            ]);
+
+        $batchInsert = [];
+        $duplicatesToUpdate = [];
+
+        foreach ($rowsData as $row) {
+            $validator = Validator::make([
+                'company_name' => $row['company_name'],
+                'email' => $row['email'],
+                'phone_number' => $row['phone_number'],
+            ], [
+                'company_name' => 'required|string|max:255',
+                'email' => 'required|email|max:255',
+                'phone_number' => 'nullable|string|max:50',
             ]);
 
             if ($validator->fails()) {
-                $this->errors[]=['line'=>$index+2,'errors'=>$validator->errors()->all()];
+                $this->errors[] = [
+                    'line' => $row['line'],
+                    'errors' => $validator->errors()->all(),
+                ];
                 continue;
             }
 
-            $signature = strtolower($data['company_name']).'||'.strtolower($data['email']).'||'.preg_replace('/\D+/','',$data['phone_number'] ?? '');
-            $duplicateId = null;
+            $sig = $row['signature'];
             $isDuplicate = false;
+            $duplicateOfId = null;
 
-            // check in-file duplicates
-            if(isset($seenInFile[$signature])){
+            // Check if duplicate in DB
+            if (isset($existingClients[$sig])) {
                 $isDuplicate = true;
-                $duplicateId = $seenInFile[$signature];
-                $this->duplicates_found++;
-            } else {
-                // check DB duplicates
-                $existing = Client::where('company_name',$data['company_name'])
-                    ->where('email',$data['email'])
-                    ->where('phone_number',$data['phone_number'])->first();
+                $duplicateOfId = $existingClients[$sig];
+                $this->seenPrimaryId[$sig] = $existingClients[$sig];
+            }
+            // Check if duplicate in this chunk
+            elseif ($chunkSignatures[$sig] > 1) {
+                $isDuplicate = true;
 
-                if($existing){
-                    $isDuplicate = true;
-                    $duplicateId = $existing->id;
-                    $this->duplicates_found++;
+                // If we already have a primary ID in this chunk, use it
+                if (!isset($this->seenPrimaryId[$sig])) {
+                    $this->seenPrimaryId[$sig] = null; // will be set after insertion
                 }
+
+                $duplicateOfId = $this->seenPrimaryId[$sig];
             }
 
-            $batch[] = array_merge($data,['is_duplicate'=>$isDuplicate,'duplicate_of_id'=>$duplicateId,'created_at'=>now(),'updated_at'=>now()]);
+            $batchInsert[] = [
+                'company_name' => $row['company_name'],
+                'email' => $row['email'],
+                'phone_number' => $row['phone_number'],
+                'is_duplicate' => $isDuplicate,
+                'duplicate_of_id' => $duplicateOfId,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
 
-            if(count($batch)>=1000){
-                Client::insert($batch);
-                foreach($batch as $b){
-                    if(!$b['is_duplicate']) $seenInFile[strtolower($b['company_name']).'||'.strtolower($b['email']).'||'.preg_replace('/\D+/','',$b['phone_number'])]=$b['id'] ?? null;
-                }
-                $this->imported += count($batch);
-                $batch = [];
+            // Insert in chunks of 1000
+            if (count($batchInsert) >= 1000) {
+                $this->insertBatchWithDuplicates($batchInsert, $sig);
+                $batchInsert = [];
             }
         }
 
-        if(count($batch)>0){
-            Client::insert($batch);
-            $this->imported += count($batch);
+        if (!empty($batchInsert)) {
+            $this->insertBatchWithDuplicates($batchInsert, $sig);
         }
     }
 
-    public function chunkSize(): int { return 1000; }
+     public function chunkSize(): int
+    {
+        return 1000;
+    }
+
+    /**
+     * Inserts batch and fixes duplicate_of_id for chunk duplicates
+     */
+    protected function insertBatchWithDuplicates(array $batch)
+    {
+        // Insert all rows and get their IDs
+        foreach ($batch as &$row) {
+            $client = Client::create([
+                'company_name' => $row['company_name'],
+                'email' => $row['email'],
+                'phone_number' => $row['phone_number'],
+                'is_duplicate' => $row['is_duplicate'],
+                'duplicate_of_id' => null, // temporarily null
+            ]);
+            $row['id'] = $client->id;
+
+            $sig = "{$row['company_name']}||{$row['email']}||{$row['phone_number']}";
+
+            // If this is first occurrence in chunk and seenPrimaryId is null, set as primary
+            if ($row['is_duplicate'] && ($this->seenPrimaryId[$sig] ?? null) === null) {
+                $this->seenPrimaryId[$sig] = $client->id;
+            }
+
+            // If duplicate and duplicate_of_id is null, set to primary
+            if ($row['is_duplicate'] && $row['duplicate_of_id'] === null) {
+                $client->update(['duplicate_of_id' => $this->seenPrimaryId[$sig]]);
+            }
+        }
+
+        $this->imported += count($batch);
+    }
 }
