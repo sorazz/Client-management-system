@@ -58,6 +58,10 @@ php artisan key:generate
 
 -   php artisan make:migrate
 
+## Queue run for file import
+
+-   php artisan queue:work
+
 ## API end points
 
 For the API I have created a ClientApiController for conduct the import and export functionality
